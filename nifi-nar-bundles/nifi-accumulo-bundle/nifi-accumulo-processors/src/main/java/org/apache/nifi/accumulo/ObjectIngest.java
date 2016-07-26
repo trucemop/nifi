@@ -18,6 +18,7 @@ package org.apache.nifi.accumulo;
  */
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.accumulo.core.client.BatchWriter;
@@ -30,8 +31,6 @@ import org.apache.accumulo.core.security.ColumnVisibility;
 import org.apache.hadoop.io.Text;
 
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.apache.accumulo.core.iterators.LongCombiner;
 import org.apache.accumulo.core.iterators.TypedValueCombiner;
 
@@ -61,7 +60,7 @@ public class ObjectIngest {
     public ObjectIngest(int chunkSize, String pathSep, ColumnVisibility colvis) {
         this.chunkSize = chunkSize;
         this.pathSep = pathSep;
-        chunkSizeBytes = intToBytes(chunkSize);
+        chunkSizeBytes = ByteBuffer.allocate(Integer.BYTES).putInt(chunkSize).array();
         buf = new byte[chunkSize];
         cv = colvis;
     }
@@ -76,7 +75,6 @@ public class ObjectIngest {
         String hash = refMap.get(objectIdKey);
         Text row = new Text(hash);
 
-        // write info to accumulo
         Mutation m = new Mutation(row);
         for (Map.Entry<String, String> entry : refMap.entrySet()) {
             m.put(REFS_CF, KeyUtil.buildNullSepText(uid, entry.getKey()), cv, timestamp, new Value(entry.getValue().getBytes()));
@@ -84,9 +82,8 @@ public class ObjectIngest {
         bw.addMutation(m);
 
         int chunkCount = 0;
-        int numRead = 0;
 
-        numRead = stream.read(buf);
+        int numRead = stream.read(buf);
         while (numRead >= 0) {
             while (numRead < buf.length) {
                 int moreRead = stream.read(buf, numRead, buf.length - numRead);
@@ -98,7 +95,7 @@ public class ObjectIngest {
             }
             m = new Mutation(row);
             Text chunkCQ = new Text(chunkSizeBytes);
-            chunkCQ.append(intToBytes(chunkCount), 0, 4);
+            chunkCQ.append(ByteBuffer.allocate(Integer.BYTES).putInt(chunkCount).array(), 0, Integer.BYTES);
             m.put(CHUNK_CF, chunkCQ, cv, timestamp, new Value(buf, 0, numRead));
             bw.addMutation(m);
             if (chunkCount == Integer.MAX_VALUE) {
@@ -110,22 +107,23 @@ public class ObjectIngest {
 
         m = new Mutation(row);
         Text chunkCQ = new Text(chunkSizeBytes);
-        chunkCQ.append(intToBytes(chunkCount), 0, 4);
+        chunkCQ.append(ByteBuffer.allocate(Integer.BYTES).putInt(chunkCount).array(), 0, Integer.BYTES);
         m.put(new Text(CHUNK_CF), chunkCQ, cv, timestamp, new Value(new byte[0]));
         bw.addMutation(m);
 
     }
 
-    public void insertDirectoryMutations(String objectnameKey, long timestamp, Map<String, String> refMap, BatchWriter bw) throws MutationsRejectedException {
+    public List<Mutation> buildDirectoryMutations(String objectnameKey, long timestamp, Map<String, String> refMap) {
 
+        List<Mutation> list = new ArrayList<>();
+        
         String name = refMap.get(objectnameKey);
 
         for (String dir : getDirList(name, pathSep)) {
 
             Mutation dirM = new Mutation(getRow(dir, pathSep));
-            Text dirColf = DIR_COLF;
-            dirM.put(dirColf, TIME_TEXT, cv, timestamp, new Value(Long.toString(timestamp).getBytes()));
-            bw.addMutation(dirM);
+            dirM.put(DIR_COLF, TIME_TEXT, cv, timestamp, new Value(Long.toString(timestamp).getBytes()));
+            list.add(dirM);
         }
 
         Mutation m = new Mutation(getRow(name, pathSep));
@@ -133,12 +131,32 @@ public class ObjectIngest {
         for (Map.Entry<String, String> entry : refMap.entrySet()) {
             m.put(colf, new Text(entry.getKey()), cv, timestamp, new Value(entry.getValue().getBytes()));
         }
-        bw.addMutation(m);
+        list.add(m);
 
+        return list;
+    }
+
+    public List<Mutation> buildIndexMutations(String objectnameKey, long timestamp, Map<String, String> refMap) {
+        List<Mutation> list = new ArrayList<>();
+        
+        String path = refMap.get(objectnameKey);
+        Text row = getForwardIndex(path, pathSep);
+        if (row != null) {
+            Text p = new Text(getRow(path, pathSep));
+            Mutation m = new Mutation(row);
+            m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
+            list.add(m);
+
+            row = getReverseIndex(path, pathSep);
+            m = new Mutation(row);
+            m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
+            list.add(m);
+        }
+        return list;
     }
 
     public static List<String> getDirList(String path, String pathSep) {
-        List<String> dirList = new ArrayList<String>();
+        List<String> dirList = new ArrayList<>();
 
         StringBuilder sb = new StringBuilder();
         boolean first = true;
@@ -156,25 +174,9 @@ public class ObjectIngest {
         return dirList;
     }
 
-    public void insertIndexMutation(String objectnameKey, long timestamp, Map<String, String> refMap, BatchWriter bw) throws MutationsRejectedException {
-        String path = refMap.get(objectnameKey);
-        Text row = getForwardIndex(path);
-        if (row != null) {
-            Text p = new Text(getRow(path, pathSep));
-            Mutation m = new Mutation(row);
-            m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
-            bw.addMutation(m);
-
-            row = getReverseIndex(path);
-            m = new Mutation(row);
-            m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
-            bw.addMutation(m);
-        }
-    }
-
     /**
-     * Calculates the depth of a path, i.e. the number of forward slashes in the
-     * path name.
+     * Calculates the depth of a path, i.e. the number of separators in the path
+     * name.
      *
      * @param path the full path of an object
      * @param pathSep separator to use for path entries
@@ -208,10 +210,11 @@ public class ObjectIngest {
      * {@link #FORWARD_PREFIX} for the index table.
      *
      * @param path the full path of a object
+     * @param pathSep separator to use for path entries
      * @return the accumulo row associated with this path
      */
-    public static Text getForwardIndex(String path) {
-        String part = path.substring(path.lastIndexOf("/") + 1);
+    public static Text getForwardIndex(String path, String pathSep) {
+        String part = path.substring(path.lastIndexOf(pathSep) + 1);
         if (part.length() == 0) {
             return null;
         }
@@ -225,10 +228,11 @@ public class ObjectIngest {
      * {@link #REVERSE_PREFIX} with the path reversed for the index table.
      *
      * @param path the full path of a object
+     * @param pathSep separator to use for path entries
      * @return the accumulo row associated with this path
      */
-    public static Text getReverseIndex(String path) {
-        String part = path.substring(path.lastIndexOf("/") + 1);
+    public static Text getReverseIndex(String path, String pathSep) {
+        String part = path.substring(path.lastIndexOf(pathSep) + 1);
         if (part.length() == 0) {
             return null;
         }
@@ -242,13 +246,5 @@ public class ObjectIngest {
         return row;
     }
 
-    public static byte[] intToBytes(int l) {
-        byte[] b = new byte[4];
-        b[0] = (byte) (l >>> 24);
-        b[1] = (byte) (l >>> 16);
-        b[2] = (byte) (l >>> 8);
-        b[3] = (byte) (l >>> 0);
-        return b;
-    }
 
 }

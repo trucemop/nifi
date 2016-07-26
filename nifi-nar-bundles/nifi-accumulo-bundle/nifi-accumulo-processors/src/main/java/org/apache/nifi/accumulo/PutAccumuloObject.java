@@ -327,8 +327,8 @@ public class PutAccumuloObject extends AbstractProcessor {
                         }
                     });
 
-                    ingest.insertDirectoryMutations(objectNameKey, timestamp, refMap, directoryBw);
-                    ingest.insertIndexMutation(objectNameKey, timestamp, refMap, indexBw);
+                    directoryBw.addMutations(ingest.buildDirectoryMutations(objectNameKey, timestamp, refMap));
+                    indexBw.addMutations(ingest.buildIndexMutations(objectNameKey, timestamp, refMap));
 
                     session.getProvenanceReporter().send(flowFile, "accumulo://" + objectTableName + "/" + directoryTableName + "/" + indexTableName + ":" + objectName + ":" + objectId);
                 }

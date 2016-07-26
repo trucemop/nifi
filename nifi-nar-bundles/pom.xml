@@ -69,6 +69,7 @@
         <module>nifi-windows-event-log-bundle</module>
         <module>nifi-ignite-bundle</module>
         <module>nifi-email-bundle</module>
+        <module>nifi-accumulo-bundle</module>
     </modules>
 
     <dependencyManagement>

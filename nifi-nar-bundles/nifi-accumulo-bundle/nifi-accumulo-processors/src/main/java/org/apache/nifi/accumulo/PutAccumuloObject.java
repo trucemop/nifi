@@ -19,6 +19,8 @@ package org.apache.nifi.accumulo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +40,10 @@ import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.security.ColumnVisibility;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.Validator;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
@@ -85,7 +89,7 @@ public class PutAccumuloObject extends AbstractProcessor {
             .description("The password to use when connecting to Accumulo")
             .required(true)
             .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .addValidator(Validator.VALID)
             .build();
     static final PropertyDescriptor OBJECT_TABLE = new PropertyDescriptor.Builder()
             .name("Object Table")
@@ -124,7 +128,7 @@ public class PutAccumuloObject extends AbstractProcessor {
             .required(true)
             .expressionLanguageSupported(false)
             .defaultValue("100000")
-            .addValidator(StandardValidators.INTEGER_VALIDATOR)
+            .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
     static final PropertyDescriptor OBJECT_NAME_ATTRIBUTE = new PropertyDescriptor.Builder()
             .name("Object Name Attribute")
@@ -161,6 +165,7 @@ public class PutAccumuloObject extends AbstractProcessor {
             .name("Path separator")
             .description("String to use as a separator for the Object's path.")
             .required(true)
+            .defaultValue("/")
             .expressionLanguageSupported(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
@@ -189,6 +194,13 @@ public class PutAccumuloObject extends AbstractProcessor {
             .defaultValue(DURABILITY_DEFAULT.getValue())
             .build();
 
+    static final PropertyDescriptor BLACKLIST = new PropertyDescriptor.Builder()
+            .name("Blacklist")
+            .description("Comma separated list of keys/attributes that should not be written to accumulo.")
+            .required(false)
+            .addValidator(Validator.VALID)
+            .build();
+    
     static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
             .description("A FlowFile is routed to this relationship after it has been sent to Accumulo")
@@ -198,6 +210,8 @@ public class PutAccumuloObject extends AbstractProcessor {
             .description("A FlowFile is routed to this relationship if it cannot be sent to Accumulo")
             .build();
 
+    protected Connector connector = null;
+    
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         final List<PropertyDescriptor> properties = new ArrayList<>();
@@ -218,6 +232,8 @@ public class PutAccumuloObject extends AbstractProcessor {
         properties.add(DURABILITY);
         properties.add(BATCH_SIZE);
         properties.add(TIMEOUT);
+        properties.add(BLACKLIST);
+        
         return properties;
     }
 
@@ -229,7 +245,7 @@ public class PutAccumuloObject extends AbstractProcessor {
         return relationships;
     }
 
-    private Connector getConnector(final ProcessContext context) throws AccumuloException, AccumuloSecurityException {
+    protected Connector getConnector(final ProcessContext context) throws AccumuloException, AccumuloSecurityException {
         final String instanceName = context.getProperty(INSTANCE_NAME).getValue();
         final String zookeeperConnString = context.getProperty(ZOOKEEPER_CONNECT_STRING).getValue();
         final Instance instance = new ZooKeeperInstance(instanceName, zookeeperConnString);
@@ -239,17 +255,25 @@ public class PutAccumuloObject extends AbstractProcessor {
         return instance.getConnector(username, new PasswordToken(password));
     }
 
+    @OnScheduled
+    public void onScheduled(final ProcessContext context) throws AccumuloException, AccumuloSecurityException {
+        connector = getConnector(context);
+    }
+    
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final List<FlowFile> flowFiles = session.get(context.getProperty(BATCH_SIZE).asInteger());
         if (flowFiles.isEmpty()) {
             return;
         }
-
+        final String[] blacklist = context.getProperty(BLACKLIST).getValue().split(",");
+        
+        final Set<String> blacklistSet = new HashSet<>(Arrays.asList(blacklist));
+        
         try {
             final String durability = context.getProperty(DURABILITY).getValue();
             final int chunkSize = context.getProperty(CHUNK_SIZE).asInteger();
-            final Connector connector = getConnector(context);
+            
             final BatchWriterConfig batchWriterConfig = new BatchWriterConfig();
             batchWriterConfig.setDurability(Durability.valueOf(durability.toUpperCase()));
             batchWriterConfig.setTimeout(context.getProperty(TIMEOUT).asTimePeriod(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
@@ -262,15 +286,10 @@ public class PutAccumuloObject extends AbstractProcessor {
                     final String objectTableName = context.getProperty(OBJECT_TABLE).evaluateAttributeExpressions(flowFile).getValue();
                     final String directoryTableName = context.getProperty(DIRECTORY_TABLE).evaluateAttributeExpressions(flowFile).getValue();
                     final String indexTableName = context.getProperty(INDEX_TABLE).evaluateAttributeExpressions(flowFile).getValue();
-                    final String objectNameKey = context.getProperty(OBJECT_NAME_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
-                    final String objectIdKey = context.getProperty(OBJECT_ID_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
-                    final String objectNameIdKey = context.getProperty(OBJECT_NAME_ID_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
-                    final String timestampKey = context.getProperty(TIMESTAMP_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
                     final String pathSep = context.getProperty(PATH_SEP).getValue();
-                    final String objectName = flowFile.getAttribute(objectNameKey);
-                    final String objectId = flowFile.getAttribute(objectIdKey);
 
-                    final long timestamp = Long.parseLong(flowFile.getAttribute(timestampKey));
+
+                    
 
                     final BatchWriter objectBw;
                     try {
@@ -301,8 +320,16 @@ public class PutAccumuloObject extends AbstractProcessor {
 
                     success.add(flowFile);
 
-                    final String visibilityKey = flowFile.getAttribute(context.getProperty(OBJECT_TABLE).evaluateAttributeExpressions(flowFile).getValue());
-
+                    final String visibilityKey = context.getProperty(VISIBILITY_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
+                    final String objectNameKey = context.getProperty(OBJECT_NAME_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
+                    final String objectIdKey = context.getProperty(OBJECT_ID_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
+                    final String objectNameIdKey = context.getProperty(OBJECT_NAME_ID_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
+                    final String timestampKey = context.getProperty(TIMESTAMP_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
+                    final long timestamp = Long.parseLong(flowFile.getAttribute(timestampKey));
+                    
+                    final String objectName = flowFile.getAttribute(objectNameKey);
+                    final String objectId = flowFile.getAttribute(objectIdKey);
+                    final String objectNameId = flowFile.getAttribute(objectNameIdKey);
                     final String visString = flowFile.getAttribute(visibilityKey);
                     ColumnVisibility cv = null;
                     if (visString == null) {
@@ -311,15 +338,17 @@ public class PutAccumuloObject extends AbstractProcessor {
                         cv = new ColumnVisibility(visString);
                     }
 
+                    
                     final ObjectIngest ingest = new ObjectIngest(chunkSize, pathSep, cv);
 
-                    final Map<String, String> refMap = flowFile.getAttributes();
-
+                    final Map<String, String> refMap = new HashMap<>(flowFile.getAttributes());
+                    refMap.keySet().removeAll(blacklistSet);
+                    
                     session.read(flowFile, new InputStreamCallback() {
                         @Override
                         public void process(final InputStream in) throws IOException {
                             try {
-                                ingest.insertObjectData(objectIdKey, objectNameIdKey, timestamp, refMap, in, objectBw);
+                                ingest.insertObjectData(objectId, objectNameId, timestamp, refMap, in, objectBw);
                             } catch (MutationsRejectedException ex) {
                                 getLogger().error("Failed to write {} to the {} Accumulo table; routing to failure", new Object[]{flowFile, objectTableName});
                                 session.transfer(flowFile, REL_FAILURE);
@@ -327,8 +356,8 @@ public class PutAccumuloObject extends AbstractProcessor {
                         }
                     });
 
-                    directoryBw.addMutations(ingest.buildDirectoryMutations(objectNameKey, timestamp, refMap));
-                    indexBw.addMutations(ingest.buildIndexMutations(objectNameKey, timestamp, refMap));
+                    directoryBw.addMutations(ingest.buildDirectoryMutations(objectName, timestamp, refMap));
+                    indexBw.addMutations(ingest.buildIndexMutations(objectName, timestamp, refMap));
 
                     session.getProvenanceReporter().send(flowFile, "accumulo://" + objectTableName + "/" + directoryTableName + "/" + indexTableName + ":" + objectName + ":" + objectId);
                 }

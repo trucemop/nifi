@@ -34,6 +34,7 @@ import java.util.Map;
 import org.apache.accumulo.core.iterators.LongCombiner;
 import org.apache.accumulo.core.iterators.TypedValueCombiner;
 
+
 public class ObjectIngest {
 
     public static final Text CHUNK_CF = new Text("~chunk");
@@ -43,7 +44,8 @@ public class ObjectIngest {
     public static final Text INDEX_COLF = new Text("i");
     public static final Text DIR_COLF = new Text("dir");
     public static final Text TIME_TEXT = new Text("time");
-
+    public static final byte[] nullbyte = new byte[] {0};
+    
     public static final ByteSequence CHUNK_CF_BS = new ArrayByteSequence(CHUNK_CF.getBytes(), 0, CHUNK_CF.getLength());
     public static final ByteSequence REFS_CF_BS = new ArrayByteSequence(REFS_CF.getBytes(), 0, REFS_CF.getLength());
     static final Value NULL_VALUE = new Value(new byte[0]);
@@ -65,19 +67,16 @@ public class ObjectIngest {
         cv = colvis;
     }
 
-    public void insertObjectData(String objectIdKey, String objectnameIdKey, long timestamp, Map<String, String> refMap, InputStream stream, BatchWriter bw) throws MutationsRejectedException, IOException {
+    public void insertObjectData(String objectId, String objectnameId, long timestamp, Map<String, String> refMap, InputStream stream, BatchWriter bw) throws MutationsRejectedException, IOException {
         if (chunkSize == 0) {
             return;
         }
 
-        String uid = refMap.get(objectnameIdKey);
-
-        String hash = refMap.get(objectIdKey);
-        Text row = new Text(hash);
+        Text row = new Text(objectId);
 
         Mutation m = new Mutation(row);
         for (Map.Entry<String, String> entry : refMap.entrySet()) {
-            m.put(REFS_CF, KeyUtil.buildNullSepText(uid, entry.getKey()), cv, timestamp, new Value(entry.getValue().getBytes()));
+            m.put(REFS_CF, buildNullSepText(objectnameId, entry.getKey()), cv, timestamp, new Value(entry.getValue().getBytes()));
         }
         bw.addMutation(m);
 
@@ -99,7 +98,7 @@ public class ObjectIngest {
             m.put(CHUNK_CF, chunkCQ, cv, timestamp, new Value(buf, 0, numRead));
             bw.addMutation(m);
             if (chunkCount == Integer.MAX_VALUE) {
-                throw new RuntimeException("too many chunks for object " + uid + ", try raising chunk size");
+                throw new RuntimeException("too many chunks for object " + objectId + ", try raising chunk size");
             }
             chunkCount++;
             numRead = stream.read(buf);
@@ -113,20 +112,18 @@ public class ObjectIngest {
 
     }
 
-    public List<Mutation> buildDirectoryMutations(String objectnameKey, long timestamp, Map<String, String> refMap) {
+    public List<Mutation> buildDirectoryMutations(String objectname, long timestamp, Map<String, String> refMap) {
 
         List<Mutation> list = new ArrayList<>();
-        
-        String name = refMap.get(objectnameKey);
 
-        for (String dir : getDirList(name, pathSep)) {
+        for (String dir : getDirList(objectname, pathSep)) {
 
             Mutation dirM = new Mutation(getRow(dir, pathSep));
             dirM.put(DIR_COLF, TIME_TEXT, cv, timestamp, new Value(Long.toString(timestamp).getBytes()));
             list.add(dirM);
         }
 
-        Mutation m = new Mutation(getRow(name, pathSep));
+        Mutation m = new Mutation(getRow(objectname, pathSep));
         Text colf = new Text(encoder.encode(Long.MAX_VALUE - timestamp));
         for (Map.Entry<String, String> entry : refMap.entrySet()) {
             m.put(colf, new Text(entry.getKey()), cv, timestamp, new Value(entry.getValue().getBytes()));
@@ -136,18 +133,17 @@ public class ObjectIngest {
         return list;
     }
 
-    public List<Mutation> buildIndexMutations(String objectnameKey, long timestamp, Map<String, String> refMap) {
+    public List<Mutation> buildIndexMutations(String objectname, long timestamp, Map<String, String> refMap) {
         List<Mutation> list = new ArrayList<>();
-        
-        String path = refMap.get(objectnameKey);
-        Text row = getForwardIndex(path, pathSep);
+
+        Text row = getForwardIndex(objectname, pathSep);
         if (row != null) {
-            Text p = new Text(getRow(path, pathSep));
+            Text p = new Text(getRow(objectname, pathSep));
             Mutation m = new Mutation(row);
             m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
             list.add(m);
 
-            row = getReverseIndex(path, pathSep);
+            row = getReverseIndex(objectname, pathSep);
             m = new Mutation(row);
             m.put(INDEX_COLF, p, cv, timestamp, NULL_VALUE);
             list.add(m);
@@ -246,5 +242,20 @@ public class ObjectIngest {
         return row;
     }
 
+    /**
+     * Join some number of strings using a null byte separator into a text
+     * object.
+     *
+     * @param s strings
+     * @return a text object containing the strings separated by null bytes
+     */
+    public static Text buildNullSepText(String... s) {
+        Text t = new Text(s[0]);
+        for (int i = 1; i < s.length; i++) {
+            t.append(nullbyte, 0, 1);
+            t.append(s[i].getBytes(), 0, s[i].length());
+        }
+        return t;
+    }
 
 }

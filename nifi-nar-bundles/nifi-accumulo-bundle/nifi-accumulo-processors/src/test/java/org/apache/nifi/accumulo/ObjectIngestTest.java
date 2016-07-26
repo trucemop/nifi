@@ -59,7 +59,7 @@ public class ObjectIngestTest {
 
         long timestamp = 1234L;
         int chunkSize = 0;
-        byte[] chunkSizeBytes = ByteBuffer.allocate(Integer.BYTES).putInt(chunkSize).array();
+
 
         InputStream stream = new ByteArrayInputStream(content.getBytes());
 
@@ -71,7 +71,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(chunkSize, pathSep, cv);
 
-        ingest.insertObjectData(objectIdKey, objectNameIdKey, timestamp, refMap, stream, bw);
+        ingest.insertObjectData(objectIdValue, objectNameIdValue, timestamp, refMap, stream, bw);
 
         Scanner scanner = connector.createScanner("table", new Authorizations("group"));
 
@@ -117,7 +117,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(chunkSize, pathSep, cv);
 
-        ingest.insertObjectData(objectIdKey, objectNameIdKey, timestamp, refMap, stream, bw);
+        ingest.insertObjectData(objectIdValue, objectNameIdValue, timestamp, refMap, stream, bw);
 
         Scanner scanner = connector.createScanner("table", new Authorizations("group"));
 
@@ -128,11 +128,11 @@ public class ObjectIngestTest {
         }
 
         KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
-                KeyUtil.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
+                ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
                 new Value(objectIdValue.getBytes()));
 
         KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
-                KeyUtil.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
+                ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
                 new Value(objectNameIdValue.getBytes()));
         
         Text chunkCq = new Text(chunkSizeBytes);
@@ -156,7 +156,7 @@ public class ObjectIngestTest {
         assertEquals("Third entry should be equal", third, entryList.get(2));
         assertEquals("Fourth entry should be equal", fourth, entryList.get(3));
 
-        assertEquals("Number of mutations should be equal", 4, entryList.size());
+        assertEquals("Number of entries should be equal", 4, entryList.size());
     }
     
     @Test
@@ -191,7 +191,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(chunkSize, pathSep, cv);
 
-        ingest.insertObjectData(objectIdKey, objectNameIdKey, timestamp, refMap, stream, bw);
+        ingest.insertObjectData(objectIdValue, objectNameIdValue, timestamp, refMap, stream, bw);
 
         Scanner scanner = connector.createScanner("table", new Authorizations("group"));
 
@@ -202,11 +202,11 @@ public class ObjectIngestTest {
         }
 
         KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
-                KeyUtil.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
+                ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
                 new Value(objectIdValue.getBytes()));
 
         KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
-                KeyUtil.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
+                ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
                 new Value(objectNameIdValue.getBytes()));
         
         Text chunkCq = new Text(chunkSizeBytes);
@@ -245,7 +245,7 @@ public class ObjectIngestTest {
         assertEquals("Fourth entry should be equal", fourth, entryList.get(3));
         assertEquals("Fifth entry should be equal", fifth, entryList.get(4));
         assertEquals("Sixth entry should be equal", sixth, entryList.get(5));
-        assertEquals("Number of mutations should be equal", 6, entryList.size());
+        assertEquals("Number of entries should be equal", 6, entryList.size());
     }
 
     @Test
@@ -266,7 +266,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(0, pathSep, cv);
 
-        List<Mutation> mutList = ingest.buildDirectoryMutations(pathName, timestamp, refMap);
+        List<Mutation> mutList = ingest.buildDirectoryMutations(path, timestamp, refMap);
 
         Mutation first = new Mutation("000");
         first.put(ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv, timestamp, new Value(Long.toString(timestamp).getBytes()));
@@ -305,7 +305,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(0, pathSep, cv);
 
-        List<Mutation> mutList = ingest.buildIndexMutations(pathName, timestamp, refMap);
+        List<Mutation> mutList = ingest.buildIndexMutations(path, timestamp, refMap);
 
         Mutation first = new Mutation("ffile.txt");
         first.put(ObjectIngest.INDEX_COLF, new Text("003" + path), cv, timestamp, ObjectIngest.NULL_VALUE);
@@ -334,7 +334,7 @@ public class ObjectIngestTest {
 
         ObjectIngest ingest = new ObjectIngest(0, pathSep, cv);
 
-        List<Mutation> mutList = ingest.buildIndexMutations(pathName, timestamp, refMap);
+        List<Mutation> mutList = ingest.buildIndexMutations(path, timestamp, refMap);
 
         assertEquals("Number of mutations should be equal", 0, mutList.size());
     }

@@ -40,6 +40,8 @@ import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.security.ColumnVisibility;
+import org.apache.nifi.annotation.documentation.CapabilityDescription;
+import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -53,6 +55,8 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
+@Tags({"hadoop", "accumulo","object","filedata","dirlist"})
+@CapabilityDescription("Adds the Contents of a FlowFile to Accumulo tables.  Based on the Accumulo filedata/dirlist examples.")
 public class PutAccumuloObject extends AbstractProcessor {
 
     static final AllowableValue DURABILITY_DEFAULT = new AllowableValue(Durability.DEFAULT.name(), "System Default", "The data is stored using the Table or System's default configuration");
@@ -266,7 +270,13 @@ public class PutAccumuloObject extends AbstractProcessor {
         if (flowFiles.isEmpty()) {
             return;
         }
-        final String[] blacklist = context.getProperty(BLACKLIST).getValue().split(",");
+        String blacklistString = context.getProperty(BLACKLIST).getValue();
+        final String[] blacklist;
+        if(blacklistString != null) {
+            blacklist = blacklistString.split(",");
+        } else {
+            blacklist = new String[0];
+        }
         
         final Set<String> blacklistSet = new HashSet<>(Arrays.asList(blacklist));
         
@@ -292,28 +302,14 @@ public class PutAccumuloObject extends AbstractProcessor {
                     
 
                     final BatchWriter objectBw;
-                    try {
-                        objectBw = writer.getBatchWriter(objectTableName);
-                    } catch (final TableNotFoundException e) {
-                        getLogger().error("Failed to send {} to Accumulo because the table {} is not known; routing to failure", new Object[]{flowFile, objectTableName});
-                        session.transfer(flowFile, REL_FAILURE);
-                        continue;
-                    }
-
                     final BatchWriter directoryBw;
-                    try {
-                        directoryBw = writer.getBatchWriter(directoryTableName);
-                    } catch (final TableNotFoundException e) {
-                        getLogger().error("Failed to send {} to Accumulo because the table {} is not known; routing to failure", new Object[]{flowFile, directoryTableName});
-                        session.transfer(flowFile, REL_FAILURE);
-                        continue;
-                    }
-
                     final BatchWriter indexBw;
                     try {
+                        objectBw = writer.getBatchWriter(objectTableName);
+                        directoryBw = writer.getBatchWriter(directoryTableName);
                         indexBw = writer.getBatchWriter(indexTableName);
                     } catch (final TableNotFoundException e) {
-                        getLogger().error("Failed to send {} to Accumulo because the table {} is not known; routing to failure", new Object[]{flowFile, indexTableName});
+                        getLogger().error("Failed to send {} to Accumulo.  Table unknown; routing to failure", new Object[]{flowFile});
                         session.transfer(flowFile, REL_FAILURE);
                         continue;
                     }
@@ -331,7 +327,7 @@ public class PutAccumuloObject extends AbstractProcessor {
                     final String objectId = flowFile.getAttribute(objectIdKey);
                     final String objectNameId = flowFile.getAttribute(objectNameIdKey);
                     final String visString = flowFile.getAttribute(visibilityKey);
-                    ColumnVisibility cv = null;
+                    ColumnVisibility cv;
                     if (visString == null) {
                         cv = new ColumnVisibility();
                     } else {
@@ -365,12 +361,10 @@ public class PutAccumuloObject extends AbstractProcessor {
                 writer.close();
             }
 
-            getLogger().info("Successfully transferred {} FlowFiles to success", new Object[]{success.size()});
             session.transfer(success, REL_SUCCESS);
         } catch (final AccumuloException | AccumuloSecurityException e) {
             getLogger().error("Failed to send {} FlowFiles to Accumulo due to {}; routing to failure", new Object[]{flowFiles.size(), e});
             session.transfer(flowFiles, REL_FAILURE);
-            return;
         }
     }
 }

@@ -25,6 +25,7 @@ import org.apache.nifi.authorization.generated.Authorizers;
 import org.apache.nifi.authorization.generated.Property;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
+import org.apache.nifi.registry.VariableRegistry;
 import org.apache.nifi.util.NiFiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +73,9 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
 
     private Authorizer authorizer;
     private NiFiProperties properties;
+    private VariableRegistry variableRegistry;
     private final Map<String, Authorizer> authorizers = new HashMap<>();
+
 
     @Override
     public Authorizer getAuthorizer(String identifier) {
@@ -189,8 +192,7 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
         for (final Property property : authorizer.getProperty()) {
             authorizerProperties.put(property.getName(), property.getValue());
         }
-
-        return new StandardAuthorizerConfigurationContext(authorizer.getIdentifier(), authorizerProperties);
+        return new StandardAuthorizerConfigurationContext(authorizer.getIdentifier(), authorizerProperties, variableRegistry);
     }
 
     private void performMethodInjection(final Authorizer instance, final Class authorizerClass) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
@@ -292,7 +294,7 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
             AbstractPolicyBasedAuthorizer policyBasedAuthorizer = (AbstractPolicyBasedAuthorizer) baseAuthorizer;
             return new AbstractPolicyBasedAuthorizer() {
                 @Override
-                public Group addGroup(Group group) throws AuthorizationAccessException {
+                public Group doAddGroup(Group group) throws AuthorizationAccessException {
                     try (final NarCloseable narCloseable = NarCloseable.withNarLoader()) {
                         return policyBasedAuthorizer.addGroup(group);
                     }
@@ -306,7 +308,7 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
                 }
 
                 @Override
-                public Group updateGroup(Group group) throws AuthorizationAccessException {
+                public Group doUpdateGroup(Group group) throws AuthorizationAccessException {
                     try (final NarCloseable narCloseable = NarCloseable.withNarLoader()) {
                         return policyBasedAuthorizer.updateGroup(group);
                     }
@@ -327,7 +329,7 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
                 }
 
                 @Override
-                public User addUser(User user) throws AuthorizationAccessException {
+                public User doAddUser(User user) throws AuthorizationAccessException {
                     try (final NarCloseable narCloseable = NarCloseable.withNarLoader()) {
                         return policyBasedAuthorizer.addUser(user);
                     }
@@ -348,7 +350,7 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
                 }
 
                 @Override
-                public User updateUser(User user) throws AuthorizationAccessException {
+                public User doUpdateUser(User user) throws AuthorizationAccessException {
                     try (final NarCloseable narCloseable = NarCloseable.withNarLoader()) {
                         return policyBasedAuthorizer.updateUser(user);
                     }
@@ -483,5 +485,9 @@ public class AuthorizerFactoryBean implements FactoryBean, DisposableBean, Autho
 
     public void setProperties(NiFiProperties properties) {
         this.properties = properties;
+    }
+
+    public void setVariableRegistry(VariableRegistry variableRegistry) {
+        this.variableRegistry = variableRegistry;
     }
 }

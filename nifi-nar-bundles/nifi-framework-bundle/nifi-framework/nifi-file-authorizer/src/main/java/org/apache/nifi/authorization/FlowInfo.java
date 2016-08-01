@@ -14,28 +14,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.nifi.authorization.resource;
+package org.apache.nifi.authorization;
 
-import org.apache.nifi.authorization.Resource;
+import org.apache.nifi.web.api.dto.PortDTO;
 
-public class ProvenanceEventAuthorizable implements Authorizable {
-    final Authorizable authorizable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-    public ProvenanceEventAuthorizable(final Authorizable authorizable) {
-        this.authorizable = authorizable;
+public class FlowInfo {
+
+    private final String rootGroupId;
+
+    private final List<PortDTO> ports;
+
+    public FlowInfo(final String rootGroupId, final List<PortDTO> ports) {
+        this.rootGroupId = rootGroupId;
+        this.ports = (ports == null ? Collections.unmodifiableList(Collections.EMPTY_LIST) :
+                Collections.unmodifiableList(new ArrayList<>(ports)) );
     }
 
-    @Override
-    public Authorizable getParentAuthorizable() {
-        if (authorizable.getParentAuthorizable() == null) {
-            return null;
-        } else {
-            return new ProvenanceEventAuthorizable(authorizable.getParentAuthorizable());
-        }
+    public String getRootGroupId() {
+        return rootGroupId;
     }
 
-    @Override
-    public Resource getResource() {
-        return ResourceFactory.getProvenanceEventResource(authorizable.getResource());
+    public List<PortDTO> getPorts() {
+        return ports;
     }
+
 }

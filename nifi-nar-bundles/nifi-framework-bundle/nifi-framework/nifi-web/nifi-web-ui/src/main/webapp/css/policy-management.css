@@ -123,16 +123,17 @@ div.policy-selected-component-type-icon i.icon {
     font-size: 28px;
     font-family: flowfont;
     color: #ad9897;
+    margin-left: 2px;
 }
 
 div.policy-selected-component-name {
-    height: 14px;
+    height: 16px;
     font-size: 15px;
     font-family: Roboto;
     color: #262626;
     width: 300px;
     text-overflow: ellipsis;
-    overflow-x: hidden;
+    overflow: hidden;
     white-space: nowrap;
 }
 
@@ -140,7 +141,6 @@ div.policy-selected-component-type {
     font-size: 12px;
     font-family: Roboto;
     color: #728e9b;
-    margin-top: 3px;
 }
 
 /*
@@ -151,7 +151,7 @@ div.policy-selected-component-type {
     position: absolute;
     top: 92px;
     left: 0px;
-    bottom: 0px;
+    bottom: 67px;
     right: 0px;
     overflow: hidden;
     background-color: #fff;
@@ -161,7 +161,7 @@ div.policy-selected-component-type {
     position: absolute;
     bottom: 20px;
     left: 0px;
-    height: 32px;
+    right: 20px;
 }
 
 #policy-refresh-button {

@@ -54,11 +54,13 @@ import org.apache.nifi.encrypt.StringEncryptor;
 import org.apache.nifi.logging.LogRepositoryFactory;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.processor.StandardProcessContext;
+import org.apache.nifi.registry.VariableRegistry;
 import org.apache.nifi.remote.RemoteGroupPort;
 import org.apache.nifi.remote.RootGroupPort;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.ReflectionUtils;
 import org.apache.nifi.web.Revision;
+import org.apache.nifi.web.api.dto.TemplateDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,6 +102,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     private final Map<String, ControllerServiceNode> controllerServices = new HashMap<>();
     private final Map<String, Template> templates = new HashMap<>();
     private final StringEncryptor encryptor;
+    private final VariableRegistry variableRegistry;
 
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
@@ -108,7 +111,8 @@ public final class StandardProcessGroup implements ProcessGroup {
     private static final Logger LOG = LoggerFactory.getLogger(StandardProcessGroup.class);
 
     public StandardProcessGroup(final String id, final ControllerServiceProvider serviceProvider, final StandardProcessScheduler scheduler,
-        final NiFiProperties nifiProps, final StringEncryptor encryptor, final FlowController flowController) {
+         final NiFiProperties nifiProps, final StringEncryptor encryptor, final FlowController flowController,
+        final VariableRegistry variableRegistry) {
         this.id = id;
         this.controllerServiceProvider = serviceProvider;
         this.parent = new AtomicReference<>();
@@ -116,6 +120,7 @@ public final class StandardProcessGroup implements ProcessGroup {
         this.comments = new AtomicReference<>("");
         this.encryptor = encryptor;
         this.flowController = flowController;
+        this.variableRegistry = variableRegistry;
 
         name = new AtomicReference<>();
         position = new AtomicReference<>(new Position(0D, 0D));
@@ -124,6 +129,14 @@ public final class StandardProcessGroup implements ProcessGroup {
     @Override
     public ProcessGroup getParent() {
         return parent.get();
+    }
+
+    private ProcessGroup getRoot() {
+        ProcessGroup root = this;
+        while (root.getParent() != null) {
+            root = root.getParent();
+        }
+        return root;
     }
 
     @Override
@@ -336,7 +349,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     private void shutdown(final ProcessGroup procGroup) {
         for (final ProcessorNode node : procGroup.getProcessors()) {
             try (final NarCloseable x = NarCloseable.withNarLoader()) {
-                final StandardProcessContext processContext = new StandardProcessContext(node, controllerServiceProvider, encryptor, getStateManager(node.getIdentifier()));
+                final StandardProcessContext processContext = new StandardProcessContext(node, controllerServiceProvider, encryptor, getStateManager(node.getIdentifier()),variableRegistry);
                 ReflectionUtils.quietlyInvokeMethodsWithAnnotation(OnShutdown.class, node.getProcessor(), processContext);
             }
         }
@@ -701,7 +714,7 @@ public final class StandardProcessGroup implements ProcessGroup {
             }
 
             try (final NarCloseable x = NarCloseable.withNarLoader()) {
-                final StandardProcessContext processContext = new StandardProcessContext(processor, controllerServiceProvider, encryptor, getStateManager(processor.getIdentifier()));
+                final StandardProcessContext processContext = new StandardProcessContext(processor, controllerServiceProvider, encryptor, getStateManager(processor.getIdentifier()),variableRegistry);
                 ReflectionUtils.quietlyInvokeMethodsWithAnnotation(OnRemoved.class, processor.getProcessor(), processContext);
             } catch (final Exception e) {
                 throw new ComponentLifeCycleException("Failed to invoke 'OnRemoved' methods of " + processor, e);
@@ -1830,7 +1843,7 @@ public final class StandardProcessGroup implements ProcessGroup {
             service.verifyCanDelete();
 
             try (final NarCloseable x = NarCloseable.withNarLoader()) {
-                final ConfigurationContext configurationContext = new StandardConfigurationContext(service, controllerServiceProvider, null);
+                final ConfigurationContext configurationContext = new StandardConfigurationContext(service, controllerServiceProvider, null, variableRegistry);
                 ReflectionUtils.quietlyInvokeMethodsWithAnnotation(OnRemoved.class, service.getControllerServiceImplementation(), configurationContext);
             }
 
@@ -1855,7 +1868,6 @@ public final class StandardProcessGroup implements ProcessGroup {
             writeLock.unlock();
         }
     }
-
 
     @Override
     public void addTemplate(final Template template) {
@@ -2212,6 +2224,23 @@ public final class StandardProcessGroup implements ProcessGroup {
                 if (!map.containsKey(id)) {
                     throw new IllegalStateException("ID " + id + " does not refer to a(n) " + componentType + " in this ProcessGroup");
                 }
+            }
+        }
+    }
+
+    @Override
+    public void verifyCanAddTemplate(final String name) {
+        // ensure the name is specified
+        if (StringUtils.isBlank(name)) {
+            throw new IllegalArgumentException("Template name cannot be blank.");
+        }
+
+        for (final Template template : getRoot().findAllTemplates()) {
+            final TemplateDTO existingDto = template.getDetails();
+
+            // ensure a template with this name doesnt already exist
+            if (name.equals(existingDto.getName())) {
+                throw new IllegalStateException(String.format("A template named '%s' already exists.", name));
             }
         }
     }

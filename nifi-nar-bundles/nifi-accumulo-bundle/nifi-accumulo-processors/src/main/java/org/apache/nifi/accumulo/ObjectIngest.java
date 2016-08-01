@@ -1,5 +1,3 @@
-package org.apache.nifi.accumulo;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE object distributed with
@@ -16,6 +14,8 @@ package org.apache.nifi.accumulo;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.nifi.accumulo;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -34,7 +34,6 @@ import java.util.Map;
 import org.apache.accumulo.core.iterators.LongCombiner;
 import org.apache.accumulo.core.iterators.TypedValueCombiner;
 
-
 public class ObjectIngest {
 
     public static final Text CHUNK_CF = new Text("~chunk");
@@ -44,8 +43,8 @@ public class ObjectIngest {
     public static final Text INDEX_COLF = new Text("i");
     public static final Text DIR_COLF = new Text("dir");
     public static final Text TIME_TEXT = new Text("time");
-    public static final byte[] nullbyte = new byte[] {0};
-    
+    public static final byte[] nullbyte = new byte[]{0};
+
     public static final ByteSequence CHUNK_CF_BS = new ArrayByteSequence(CHUNK_CF.getBytes(), 0, CHUNK_CF.getLength());
     public static final ByteSequence REFS_CF_BS = new ArrayByteSequence(REFS_CF.getBytes(), 0, REFS_CF.getLength());
     static final Value NULL_VALUE = new Value(new byte[0]);

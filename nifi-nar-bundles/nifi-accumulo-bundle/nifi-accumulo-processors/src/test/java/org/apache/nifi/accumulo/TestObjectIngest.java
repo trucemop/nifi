@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE object distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.nifi.accumulo;
 
 import java.io.ByteArrayInputStream;
@@ -22,9 +38,10 @@ import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.security.ColumnVisibility;
 import org.apache.hadoop.io.Text;
 import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
-public class ObjectIngestTest {
+public class TestObjectIngest {
 
     @Test
     public void testGetDirList() {
@@ -60,7 +77,6 @@ public class ObjectIngestTest {
         long timestamp = 1234L;
         int chunkSize = 0;
 
-
         InputStream stream = new ByteArrayInputStream(content.getBytes());
 
         Map<String, String> refMap = new HashMap<>();
@@ -80,7 +96,6 @@ public class ObjectIngestTest {
         for (Map.Entry<Key, Value> entry : scanner) {
             entryList.add(entry);
         }
-
 
         assertEquals("Number of mutations should be equal", 0, entryList.size());
     }
@@ -127,30 +142,29 @@ public class ObjectIngestTest {
             entryList.add(entry);
         }
 
-        KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
+        KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
                 new Value(objectIdValue.getBytes()));
 
-        KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
+        KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
                 new Value(objectNameIdValue.getBytes()));
-        
+
         Text chunkCq = new Text(chunkSizeBytes);
-        
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(),0,Integer.BYTES);
-        
-        KeyValue third = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
+
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(), 0, Integer.BYTES);
+
+        KeyValue third = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
                 new Value(content.getBytes()));
-        
+
         chunkCq = new Text(chunkSizeBytes);
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(),0,Integer.BYTES);
-        
-        KeyValue fourth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(), 0, Integer.BYTES);
+
+        KeyValue fourth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
                 ObjectIngest.NULL_VALUE);
-        
-        
+
         assertEquals("First entry should be equal", first, entryList.get(0));
         assertEquals("Second entry should be equal", second, entryList.get(1));
         assertEquals("Third entry should be equal", third, entryList.get(2));
@@ -158,7 +172,7 @@ public class ObjectIngestTest {
 
         assertEquals("Number of entries should be equal", 4, entryList.size());
     }
-    
+
     @Test
     public void testInsertObjectDataMultipleChunks() throws Exception {
         Instance instance = new MockInstance();
@@ -201,44 +215,43 @@ public class ObjectIngestTest {
             entryList.add(entry);
         }
 
-        KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
+        KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
                 new Value(objectIdValue.getBytes()));
 
-        KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF, 
+        KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
                 new Value(objectNameIdValue.getBytes()));
-        
+
         Text chunkCq = new Text(chunkSizeBytes);
-        
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(),0,Integer.BYTES);
-        
-        KeyValue third = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
+
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(), 0, Integer.BYTES);
+
+        KeyValue third = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
                 new Value("Mary had a".getBytes()));
-        
-        chunkCq = new Text(chunkSizeBytes);
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(),0,Integer.BYTES);
-        
-        KeyValue fourth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
-                chunkCq, cv, timestamp),
-                new Value(" little la".getBytes()));
-        
 
         chunkCq = new Text(chunkSizeBytes);
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(2).array(),0,Integer.BYTES);
-        
-        KeyValue fifth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(), 0, Integer.BYTES);
+
+        KeyValue fourth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
-                new Value("mb.".getBytes()));        
-        
+                new Value(" little la".getBytes()));
+
         chunkCq = new Text(chunkSizeBytes);
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(3).array(),0,Integer.BYTES);
-        
-        KeyValue sixth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF, 
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(2).array(), 0, Integer.BYTES);
+
+        KeyValue fifth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
-                ObjectIngest.NULL_VALUE);  
-        
+                new Value("mb.".getBytes()));
+
+        chunkCq = new Text(chunkSizeBytes);
+        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(3).array(), 0, Integer.BYTES);
+
+        KeyValue sixth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
+                chunkCq, cv, timestamp),
+                ObjectIngest.NULL_VALUE);
+
         assertEquals("First entry should be equal", first, entryList.get(0));
         assertEquals("Second entry should be equal", second, entryList.get(1));
         assertEquals("Third entry should be equal", third, entryList.get(2));

@@ -1,5 +1,3 @@
-package org.apache.nifi.accumulo;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -16,6 +14,8 @@ package org.apache.nifi.accumulo;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.nifi.accumulo;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
-@Tags({"hadoop", "accumulo","object","filedata","dirlist"})
+@Tags({"hadoop", "accumulo", "object", "filedata", "dirlist"})
 @CapabilityDescription("Adds the Contents of a FlowFile to Accumulo tables.  Based on the Accumulo filedata/dirlist examples.")
 public class PutAccumuloObject extends AbstractProcessor {
 
@@ -204,7 +204,7 @@ public class PutAccumuloObject extends AbstractProcessor {
             .required(false)
             .addValidator(Validator.VALID)
             .build();
-    
+
     static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
             .description("A FlowFile is routed to this relationship after it has been sent to Accumulo")
@@ -215,7 +215,7 @@ public class PutAccumuloObject extends AbstractProcessor {
             .build();
 
     protected Connector connector = null;
-    
+
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         final List<PropertyDescriptor> properties = new ArrayList<>();
@@ -237,7 +237,7 @@ public class PutAccumuloObject extends AbstractProcessor {
         properties.add(BATCH_SIZE);
         properties.add(TIMEOUT);
         properties.add(BLACKLIST);
-        
+
         return properties;
     }
 
@@ -263,7 +263,7 @@ public class PutAccumuloObject extends AbstractProcessor {
     public void onScheduled(final ProcessContext context) throws AccumuloException, AccumuloSecurityException {
         connector = getConnector(context);
     }
-    
+
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final List<FlowFile> flowFiles = session.get(context.getProperty(BATCH_SIZE).asInteger());
@@ -272,18 +272,18 @@ public class PutAccumuloObject extends AbstractProcessor {
         }
         String blacklistString = context.getProperty(BLACKLIST).getValue();
         final String[] blacklist;
-        if(blacklistString != null) {
+        if (blacklistString != null) {
             blacklist = blacklistString.split(",");
         } else {
             blacklist = new String[0];
         }
-        
+
         final Set<String> blacklistSet = new HashSet<>(Arrays.asList(blacklist));
-        
+
         try {
             final String durability = context.getProperty(DURABILITY).getValue();
             final int chunkSize = context.getProperty(CHUNK_SIZE).asInteger();
-            
+
             final BatchWriterConfig batchWriterConfig = new BatchWriterConfig();
             batchWriterConfig.setDurability(Durability.valueOf(durability.toUpperCase()));
             batchWriterConfig.setTimeout(context.getProperty(TIMEOUT).asTimePeriod(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
@@ -297,9 +297,6 @@ public class PutAccumuloObject extends AbstractProcessor {
                     final String directoryTableName = context.getProperty(DIRECTORY_TABLE).evaluateAttributeExpressions(flowFile).getValue();
                     final String indexTableName = context.getProperty(INDEX_TABLE).evaluateAttributeExpressions(flowFile).getValue();
                     final String pathSep = context.getProperty(PATH_SEP).getValue();
-
-
-                    
 
                     final BatchWriter objectBw;
                     final BatchWriter directoryBw;
@@ -322,7 +319,7 @@ public class PutAccumuloObject extends AbstractProcessor {
                     final String objectNameIdKey = context.getProperty(OBJECT_NAME_ID_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
                     final String timestampKey = context.getProperty(TIMESTAMP_ATTRIBUTE).evaluateAttributeExpressions(flowFile).getValue();
                     final long timestamp = Long.parseLong(flowFile.getAttribute(timestampKey));
-                    
+
                     final String objectName = flowFile.getAttribute(objectNameKey);
                     final String objectId = flowFile.getAttribute(objectIdKey);
                     final String objectNameId = flowFile.getAttribute(objectNameIdKey);
@@ -334,12 +331,11 @@ public class PutAccumuloObject extends AbstractProcessor {
                         cv = new ColumnVisibility(visString);
                     }
 
-                    
                     final ObjectIngest ingest = new ObjectIngest(chunkSize, pathSep, cv);
 
                     final Map<String, String> refMap = new HashMap<>(flowFile.getAttributes());
                     refMap.keySet().removeAll(blacklistSet);
-                    
+
                     session.read(flowFile, new InputStreamCallback() {
                         @Override
                         public void process(final InputStream in) throws IOException {

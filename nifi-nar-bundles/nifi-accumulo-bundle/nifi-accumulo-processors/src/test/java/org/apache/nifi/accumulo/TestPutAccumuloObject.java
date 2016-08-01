@@ -332,7 +332,7 @@ public class TestPutAccumuloObject {
         runner.assertAllFlowFilesTransferred(PutAccumuloObject.REL_SUCCESS);
     }
 
-    public class KeyValueComparator implements Comparator<KeyValue> {
+    private class KeyValueComparator implements Comparator<KeyValue> {
 
         @Override
         public int compare(KeyValue t, KeyValue t1) {

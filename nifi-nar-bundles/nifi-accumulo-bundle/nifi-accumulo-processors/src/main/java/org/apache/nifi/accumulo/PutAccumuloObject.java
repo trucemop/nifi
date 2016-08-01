@@ -56,7 +56,8 @@ import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 @Tags({"hadoop", "accumulo", "object", "filedata", "dirlist"})
-@CapabilityDescription("Adds the Contents of a FlowFile to Accumulo tables.  Based on the Accumulo filedata/dirlist examples.")
+@CapabilityDescription("Adds the Contents of a FlowFile to Accumulo tables.  Based on the Accumulo filedata/dirlist examples."
+        + "Compatible with the query and search examples if md5 is the Object ID Attribute and '/' is used as the Path separator.")
 public class PutAccumuloObject extends AbstractProcessor {
 
     static final AllowableValue DURABILITY_DEFAULT = new AllowableValue(Durability.DEFAULT.name(), "System Default", "The data is stored using the Table or System's default configuration");

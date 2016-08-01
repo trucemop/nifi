@@ -19,6 +19,8 @@ package org.apache.nifi.accumulo;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,34 +42,66 @@ import org.junit.Test;
 import org.apache.nifi.util.TestRunner;
 import org.apache.nifi.util.TestRunners;
 import static org.junit.Assert.assertEquals;
+import org.junit.Before;
 
 public class TestPutAccumuloObject {
 
-    @Test
-    public void testSingleFlowFile() throws AccumuloException, AccumuloSecurityException, TableExistsException, TableNotFoundException, UnsupportedEncodingException {
+    private String objectTable;
+    private String directoryTable;
+    private String indexTable;
+    private String userName;
+    private String instanceName;
+    private String password;
+    private String visibilityValue;
+    private String visibilityKey;
+    private String objectIdValue;
+    private String objectIdKey;
+    private String objectNameIdValue;
+    private String objectNameIdKey;
+    private String objectNameValue;
+    private String objectNameKey;
+    private String timestampKey;
+    private long timestamp;
+    private int chunkSize;
+    private byte[] chunkSizeBytes;
+    private String blacklist;
+    private String content;
+    private TestRunner runner;
+    private PutAccumuloObject pao;
+    private List<KeyValue> objectTableResults;
+    private List<KeyValue> dirTableResults;
+    private List<KeyValue> indexTableResults;
 
-        final TestRunner runner = TestRunners.newTestRunner(PutAccumuloObject.class);
+    @Before
+    public void setup() {
+        objectTable = "object";
+        directoryTable = "dir";
+        indexTable = "index";
+        userName = "root";
+        instanceName = "instance";
+        password = "";
+        visibilityValue = "group";
+        visibilityKey = "vis";
+        objectIdValue = "ABCDEFG";
+        objectIdKey = "objectHash";
+        objectNameIdValue = "HIJKLMNOP";
+        objectNameIdKey = "objectNameHash";
+        objectNameValue = "/home/user/file.txt";
+        objectNameKey = "filename";
+        timestampKey = "timestamp";
+        timestamp = 1234L;
+        chunkSize = 100000;
+        chunkSizeBytes = ByteBuffer.allocate(Integer.BYTES).putInt(chunkSize).array();
+        blacklist = "uuid,path,";
+        content = "Mary had a little lamb.";
+        runner = TestRunners.newTestRunner(PutAccumuloObject.class);
+        pao = (PutAccumuloObject) runner.getProcessor();
+        objectTableResults = new ArrayList<>();
+        dirTableResults = new ArrayList<>();
+        indexTableResults = new ArrayList<>();
+    }
 
-        String objectTable = "object";
-        String directoryTable = "dir";
-        String indexTable = "index";
-        String userName = "root";
-        String instanceName = "instance";
-        String password = "";
-        String visibilityValue = "group";
-        String visibilityKey = "vis";
-        String objectIdValue = "ABCDEFG";
-        String objectIdKey = "objectHash";
-        String objectNameIdValue = "HIJKLMNOP";
-        String objectNameIdKey = "objectNameHash";
-        String objectNameValue = "/home/user/file.txt";
-        String objectNameKey = "filename";
-        String timestampKey = "timestamp";
-
-        long timestamp = 1234L;
-        int chunkSize = 100000;
-        byte[] chunkSizeBytes = ByteBuffer.allocate(Integer.BYTES).putInt(chunkSize).array();
-
+    private void buildDefaultTest() throws AccumuloException, AccumuloSecurityException, TableExistsException, UnsupportedEncodingException {
         runner.setProperty(PutAccumuloObject.INSTANCE_NAME, instanceName);
         runner.setProperty(PutAccumuloObject.USERNAME, userName);
         runner.setProperty(PutAccumuloObject.PASSWORD, password);
@@ -80,14 +114,10 @@ public class TestPutAccumuloObject {
         runner.setProperty(PutAccumuloObject.OBJECT_ID_ATTRIBUTE, objectIdKey);
         runner.setProperty(PutAccumuloObject.OBJECT_NAME_ID_ATTRIBUTE, objectNameIdKey);
         runner.setProperty(PutAccumuloObject.TIMESTAMP_ATTRIBUTE, timestampKey);
-        runner.setProperty(PutAccumuloObject.BLACKLIST, "uuid,path," + visibilityKey);
-
-        String content = "Mary had a little lamb.";
-
-        PutAccumuloObject pao = (PutAccumuloObject) runner.getProcessor();
+        runner.setProperty(PutAccumuloObject.BLACKLIST, blacklist + visibilityKey);
         Instance instance = new MockInstance();
 
-        pao.connector = instance.getConnector(userName, new PasswordToken(""));
+        pao.connector = instance.getConnector(userName, new PasswordToken(password));
         pao.connector.tableOperations().create(objectTable);
         pao.connector.tableOperations().create(directoryTable);
         pao.connector.tableOperations().create(indexTable);
@@ -100,55 +130,93 @@ public class TestPutAccumuloObject {
         attributes.put(visibilityKey, visibilityValue);
         runner.enqueue(content.getBytes("UTF-8"), attributes);
 
-        runner.run(1, false, false);
-
-        Scanner objectScanner = pao.connector.createScanner(objectTable, new Authorizations(visibilityValue));
-
-        List<Map.Entry<Key, Value>> entryList = new ArrayList<>();
-
-        for (Map.Entry<Key, Value> entry : objectScanner) {
-            entryList.add(entry);
-        }
         ColumnVisibility cv = new ColumnVisibility(visibilityValue);
 
-        KeyValue first = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectNameKey), cv, timestamp),
-                new Value(objectNameValue.getBytes()));
+                new Value(objectNameValue.getBytes())));
 
-        KeyValue second = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
-                new Value(objectIdValue.getBytes()));
+                new Value(objectIdValue.getBytes())));
 
-        KeyValue third = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
-                new Value(objectNameIdValue.getBytes()));
+                new Value(objectNameIdValue.getBytes())));
 
-        KeyValue fourth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue, timestampKey), cv, timestamp),
-                new Value(Long.toString(timestamp).getBytes()));
+                new Value(Long.toString(timestamp).getBytes())));
 
         Text chunkCq = new Text(chunkSizeBytes);
 
         chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(), 0, Integer.BYTES);
 
-        KeyValue fifth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
-                new Value(content.getBytes()));
+                new Value(content.getBytes())));
 
         chunkCq = new Text(chunkSizeBytes);
         chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(), 0, Integer.BYTES);
 
-        KeyValue sixth = new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
                 chunkCq, cv, timestamp),
-                ObjectIngest.NULL_VALUE);
+                ObjectIngest.NULL_VALUE));
 
-        assertEquals("First entry should be equal", first, entryList.get(0));
-        assertEquals("Second entry should be equal", second, entryList.get(1));
-        assertEquals("Third entry should be equal", third, entryList.get(2));
-        assertEquals("Fourth entry should be equal", fourth, entryList.get(3));
-        assertEquals("Fifth entry should be equal", fifth, entryList.get(4));
-        assertEquals("Sixth entry should be equal", sixth, entryList.get(5));
-        assertEquals("Number of entries should be equal", 6, entryList.size());
+        dirTableResults.add(new KeyValue(new Key(new Text("000"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv, timestamp), new Value(Long.toString(timestamp).getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("001/home"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv, timestamp), new Value(Long.toString(timestamp).getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("002/home/user"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv, timestamp), new Value(Long.toString(timestamp).getBytes())));
+
+        byte[] timeBytes = ByteBuffer.allocate(8).putLong(Long.MAX_VALUE - timestamp).array();
+
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file.txt"), new Text(timeBytes), new Text(objectNameKey), cv, timestamp), new Value(objectNameValue.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file.txt"), new Text(timeBytes), new Text(objectIdKey), cv, timestamp), new Value(objectIdValue.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file.txt"), new Text(timeBytes), new Text(objectNameIdKey), cv, timestamp), new Value(objectNameIdValue.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file.txt"), new Text(timeBytes), new Text(timestampKey), cv, timestamp), new Value(Long.toString(timestamp).getBytes())));
+
+        indexTableResults.add(new KeyValue(new Key(new Text("ffile.txt"), ObjectIngest.INDEX_COLF, new Text("003" + objectNameValue), cv, timestamp), ObjectIngest.NULL_VALUE));
+        indexTableResults.add(new KeyValue(new Key(new Text("rtxt.elif"), ObjectIngest.INDEX_COLF, new Text("003" + objectNameValue), cv, timestamp), ObjectIngest.NULL_VALUE));
+    }
+
+    @Test
+    public void testSingleFlowFile() throws AccumuloException, AccumuloSecurityException, TableExistsException, TableNotFoundException, UnsupportedEncodingException {
+
+        buildDefaultTest();
+
+        runner.run(1, false, false);
+
+        Scanner objectScanner = pao.connector.createScanner(objectTable, new Authorizations(visibilityValue));
+
+        List<Map.Entry<Key, Value>> objectEntryList = new ArrayList<>();
+
+        for (Map.Entry<Key, Value> entry : objectScanner) {
+            objectEntryList.add(entry);
+        }
+
+        assertEquals("Number of entries should be equal", 6, objectEntryList.size());
+        assertEquals("First object entry should be equal", objectTableResults, objectEntryList);
+
+        Scanner dirScanner = pao.connector.createScanner(directoryTable, new Authorizations(visibilityValue));
+
+        List<Map.Entry<Key, Value>> dirEntryList = new ArrayList<>();
+
+        for (Map.Entry<Key, Value> entry : dirScanner) {
+            dirEntryList.add(entry);
+        }
+
+        assertEquals("Number of entries should be equal", 7, dirEntryList.size());
+        assertEquals("Entries should be equal", dirTableResults, dirEntryList);
+
+        Scanner indexScanner = pao.connector.createScanner(indexTable, new Authorizations(visibilityValue));
+
+        List<Map.Entry<Key, Value>> indexEntryList = new ArrayList<>();
+
+        for (Map.Entry<Key, Value> entry : indexScanner) {
+            indexEntryList.add(entry);
+        }
+
+        assertEquals("Number of entries should be equal", 2, indexEntryList.size());
+        assertEquals("Entries should be equal", indexTableResults, indexEntryList);
 
         assertEquals(1, runner.getProvenanceEvents().size());
         runner.assertAllFlowFilesTransferred(PutAccumuloObject.REL_SUCCESS);
@@ -157,26 +225,6 @@ public class TestPutAccumuloObject {
     @Test
     public void testMultipleFlowFiles() throws AccumuloException, AccumuloSecurityException, TableExistsException, TableNotFoundException, UnsupportedEncodingException {
 
-        final TestRunner runner = TestRunners.newTestRunner(PutAccumuloObject.class);
-
-        String objectTable = "object";
-        String directoryTable = "dir";
-        String indexTable = "index";
-        String userName = "root";
-        String instanceName = "instance";
-        String password = "";
-        String visibilityValue = "group";
-        String visibilityKey = "vis";
-        String objectIdValue = "ABCDEFG";
-        String objectIdKey = "objectHash";
-        String objectNameIdValue = "HIJKLMNOP";
-        String objectNameIdKey = "objectNameHash";
-        String objectNameValue = "/home/user/file.txt";
-        String objectNameKey = "filename";
-        String timestampKey = "timestamp";
-        String content = "Mary had a little lamb.";
-        long timestamp = 1234L;
-
         String visibilityValue2 = "group2";
         String objectIdValue2 = "qrstuv";
         String objectNameIdValue2 = "wxyz";
@@ -184,39 +232,8 @@ public class TestPutAccumuloObject {
         String content2 = "No she didn't.";
         long timestamp2 = 5678L;
 
-        int chunkSize = 100000;
-        byte[] chunkSizeBytes = ByteBuffer.allocate(Integer.BYTES).putInt(chunkSize).array();
-
-        runner.setProperty(PutAccumuloObject.INSTANCE_NAME, instanceName);
-        runner.setProperty(PutAccumuloObject.USERNAME, userName);
-        runner.setProperty(PutAccumuloObject.PASSWORD, password);
-        runner.setProperty(PutAccumuloObject.OBJECT_TABLE, objectTable);
-        runner.setProperty(PutAccumuloObject.DIRECTORY_TABLE, directoryTable);
-        runner.setProperty(PutAccumuloObject.INDEX_TABLE, indexTable);
-        runner.setProperty(PutAccumuloObject.VISIBILITY_ATTRIBUTE, visibilityKey);
-        runner.setProperty(PutAccumuloObject.CHUNK_SIZE, Integer.toString(chunkSize));
-        runner.setProperty(PutAccumuloObject.OBJECT_NAME_ATTRIBUTE, objectNameKey);
-        runner.setProperty(PutAccumuloObject.OBJECT_ID_ATTRIBUTE, objectIdKey);
-        runner.setProperty(PutAccumuloObject.OBJECT_NAME_ID_ATTRIBUTE, objectNameIdKey);
-        runner.setProperty(PutAccumuloObject.TIMESTAMP_ATTRIBUTE, timestampKey);
-        runner.setProperty(PutAccumuloObject.BLACKLIST, "uuid,path," + visibilityKey);
+        buildDefaultTest();
         runner.setProperty(PutAccumuloObject.BATCH_SIZE, "2");
-
-        PutAccumuloObject pao = (PutAccumuloObject) runner.getProcessor();
-        Instance instance = new MockInstance();
-
-        pao.connector = instance.getConnector(userName, new PasswordToken(""));
-        pao.connector.tableOperations().create(objectTable);
-        pao.connector.tableOperations().create(directoryTable);
-        pao.connector.tableOperations().create(indexTable);
-
-        Map<String, String> attributes = new LinkedHashMap<>();
-        attributes.put(objectIdKey, objectIdValue);
-        attributes.put(objectNameIdKey, objectNameIdValue);
-        attributes.put(objectNameKey, objectNameValue);
-        attributes.put(timestampKey, Long.toString(timestamp));
-        attributes.put(visibilityKey, visibilityValue);
-        runner.enqueue(content.getBytes("UTF-8"), attributes);
 
         Map<String, String> attributes2 = new LinkedHashMap<>();
         attributes2.put(objectIdKey, objectIdValue2);
@@ -230,96 +247,98 @@ public class TestPutAccumuloObject {
 
         Scanner objectScanner = pao.connector.createScanner(objectTable, new Authorizations(visibilityValue, visibilityValue2));
 
-        List<Map.Entry<Key, Value>> entryList = new ArrayList<>();
+        List<KeyValue> objectEntryList = new ArrayList<>();
 
         for (Map.Entry<Key, Value> entry : objectScanner) {
-            entryList.add(entry);
+            objectEntryList.add(new KeyValue(entry.getKey(), entry.getValue()));
         }
-        ColumnVisibility cv = new ColumnVisibility(visibilityValue);
-
-        Text chunkCq = new Text(chunkSizeBytes);
-
-        List<KeyValue> list = new ArrayList<>();
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
-                ObjectIngest.buildNullSepText(objectNameIdValue, objectNameKey), cv, timestamp),
-                new Value(objectNameValue.getBytes())));
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
-                ObjectIngest.buildNullSepText(objectNameIdValue, objectIdKey), cv, timestamp),
-                new Value(objectIdValue.getBytes())));
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
-                ObjectIngest.buildNullSepText(objectNameIdValue, objectNameIdKey), cv, timestamp),
-                new Value(objectNameIdValue.getBytes())));
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.REFS_CF,
-                ObjectIngest.buildNullSepText(objectNameIdValue, timestampKey), cv, timestamp),
-                new Value(Long.toString(timestamp).getBytes())));
-
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(), 0, Integer.BYTES);
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
-                chunkCq, cv, timestamp),
-                new Value(content.getBytes())));
-
-        chunkCq = new Text(chunkSizeBytes);
-        chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(), 0, Integer.BYTES);
-
-        list.add(new KeyValue(new Key(new Text(objectIdValue), ObjectIngest.CHUNK_CF,
-                chunkCq, cv, timestamp),
-                ObjectIngest.NULL_VALUE));
 
         ColumnVisibility cv2 = new ColumnVisibility(visibilityValue2);
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue2, objectNameKey), cv2, timestamp2),
                 new Value(objectNameValue2.getBytes())));
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue2, objectIdKey), cv2, timestamp2),
                 new Value(objectIdValue2.getBytes())));
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue2, objectNameIdKey), cv2, timestamp2),
                 new Value(objectNameIdValue2.getBytes())));
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.REFS_CF,
                 ObjectIngest.buildNullSepText(objectNameIdValue2, timestampKey), cv2, timestamp2),
                 new Value(Long.toString(timestamp2).getBytes())));
 
-        chunkCq = new Text(chunkSizeBytes);
+        Text chunkCq = new Text(chunkSizeBytes);
         chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(0).array(), 0, Integer.BYTES);
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.CHUNK_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.CHUNK_CF,
                 chunkCq, cv2, timestamp2),
                 new Value(content2.getBytes())));
 
         chunkCq = new Text(chunkSizeBytes);
         chunkCq.append(ByteBuffer.allocate(Integer.BYTES).putInt(1).array(), 0, Integer.BYTES);
 
-        list.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.CHUNK_CF,
+        objectTableResults.add(new KeyValue(new Key(new Text(objectIdValue2), ObjectIngest.CHUNK_CF,
                 chunkCq, cv2, timestamp2),
                 ObjectIngest.NULL_VALUE));
 
-        assertEquals("First entry should be equal", list.get(0), entryList.get(0));
-        assertEquals("Second entry should be equal", list.get(1), entryList.get(1));
-        assertEquals("Third entry should be equal", list.get(2), entryList.get(2));
-        assertEquals("Fourth entry should be equal", list.get(3), entryList.get(3));
-        assertEquals("Fifth entry should be equal", list.get(4), entryList.get(4));
-        assertEquals("Sixth entry should be equal", list.get(5), entryList.get(5));
+        assertEquals("Number of entries should be equal", 12, objectEntryList.size());
+        assertEquals("Object entries should be equal", objectTableResults, objectEntryList);
 
-        assertEquals("Seventh entry should be equal", list.get(6), entryList.get(6));
-        assertEquals("Eighth entry should be equal", list.get(7), entryList.get(7));
-        assertEquals("Ninth entry should be equal", list.get(8), entryList.get(8));
-        assertEquals("Tenth entry should be equal", list.get(9), entryList.get(9));
-        assertEquals("Eleventh entry should be equal", list.get(10), entryList.get(10));
-        assertEquals("Twelfth entry should be equal", list.get(11), entryList.get(11));
+        dirTableResults.add(new KeyValue(new Key(new Text("000"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv2, timestamp2), new Value(Long.toString(timestamp2).getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("001/home"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv2, timestamp2), new Value(Long.toString(timestamp2).getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("002/home/user"), ObjectIngest.DIR_COLF, ObjectIngest.TIME_TEXT, cv2, timestamp2), new Value(Long.toString(timestamp2).getBytes())));
 
-        assertEquals("Number of entries should be equal", 12, entryList.size());
+        byte[] timeBytes = ByteBuffer.allocate(8).putLong(Long.MAX_VALUE - timestamp2).array();
+
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file2.txt"), new Text(timeBytes), new Text(objectNameKey), cv2, timestamp2), new Value(objectNameValue2.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file2.txt"), new Text(timeBytes), new Text(objectIdKey), cv2, timestamp2), new Value(objectIdValue2.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file2.txt"), new Text(timeBytes), new Text(objectNameIdKey), cv2, timestamp2), new Value(objectNameIdValue2.getBytes())));
+        dirTableResults.add(new KeyValue(new Key(new Text("003/home/user/file2.txt"), new Text(timeBytes), new Text(timestampKey), cv2, timestamp2), new Value(Long.toString(timestamp2).getBytes())));
+
+        Collections.sort(dirTableResults, new KeyValueComparator());
+
+        Scanner dirScanner = pao.connector.createScanner(directoryTable, new Authorizations(visibilityValue, visibilityValue2));
+
+        List<Map.Entry<Key, Value>> dirEntryList = new ArrayList<>();
+
+        for (Map.Entry<Key, Value> entry : dirScanner) {
+            dirEntryList.add(entry);
+        }
+
+        assertEquals("Number of entries should be equal", 14, dirEntryList.size());
+        assertEquals("Entries should be equal", dirTableResults, dirEntryList);
+
+        indexTableResults.add(new KeyValue(new Key(new Text("ffile2.txt"), ObjectIngest.INDEX_COLF, new Text("003" + objectNameValue2), cv2, timestamp2), ObjectIngest.NULL_VALUE));
+        indexTableResults.add(new KeyValue(new Key(new Text("rtxt.2elif"), ObjectIngest.INDEX_COLF, new Text("003" + objectNameValue2), cv2, timestamp2), ObjectIngest.NULL_VALUE));
+
+        Collections.sort(indexTableResults, new KeyValueComparator());
+
+        Scanner indexScanner = pao.connector.createScanner(indexTable, new Authorizations(visibilityValue, visibilityValue2));
+
+        List<Map.Entry<Key, Value>> indexEntryList = new ArrayList<>();
+
+        for (Map.Entry<Key, Value> entry : indexScanner) {
+            indexEntryList.add(entry);
+        }
+
+        assertEquals("Number of entries should be equal", 4, indexEntryList.size());
+        assertEquals("Entries should be equal", indexTableResults, indexEntryList);
 
         assertEquals(2, runner.getProvenanceEvents().size());
         runner.assertAllFlowFilesTransferred(PutAccumuloObject.REL_SUCCESS);
+    }
+
+    public class KeyValueComparator implements Comparator<KeyValue> {
+
+        @Override
+        public int compare(KeyValue t, KeyValue t1) {
+            return t.getKey().compareTo(t1.getKey());
+        }
+
     }
 
 }

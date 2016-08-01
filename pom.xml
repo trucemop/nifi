@@ -106,7 +106,7 @@ language governing permissions and limitations under the License. -->
         <repository>
             <id>central</id>
             <!-- This should be at top, it makes maven try the central repo 
-                first and then others and hence faster dep resolution -->
+            first and then others and hence faster dep resolution -->
             <name>Maven Repository</name>
             <url>https://repo1.maven.org/maven2</url>
             <releases>
@@ -1151,15 +1151,15 @@ language governing permissions and limitations under the License. -->
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-elasticsearch-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
-		<type>nar</type>
-	     </dependency>
-             <dependency>
+                <type>nar</type>
+            </dependency>
+            <dependency>
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-lumberjack-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
                 <type>nar</type>
             </dependency>
-             <dependency>
+            <dependency>
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-email-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
@@ -1183,19 +1183,19 @@ language governing permissions and limitations under the License. -->
                 <version>1.0.0-SNAPSHOT</version>
                 <type>nar</type>
             </dependency>
-	        <dependency>
+            <dependency>
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-site-to-site-reporting-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
                 <type>nar</type>
             </dependency>
-	        <dependency>
+            <dependency>
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-evtx-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
                 <type>nar</type>
             </dependency>
-	    <dependency>
+            <dependency>
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-windows-event-log-nar</artifactId>
                 <version>1.0.0-SNAPSHOT</version>
@@ -1298,6 +1298,12 @@ language governing permissions and limitations under the License. -->
                 <groupId>org.apache.ranger</groupId>
                 <artifactId>credentialbuilder</artifactId>
                 <version>${ranger.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-accumulo-nar</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+                <type>nar</type>
             </dependency>
             <!-- Groovy support is primarily as a test dependency -->
             <dependency>
@@ -1751,11 +1757,11 @@ language governing permissions and limitations under the License. -->
         </profile>
         <profile>
             <!-- This profile will disable DocLint which performs strict 
-                JavaDoc processing which was introduced in JDK 8. These are technically errors 
-                in the JavaDoc which we need to eventually address. However, if a release 
-                is performed using JDK 8, the JavaDoc generation would fail. By activating 
-                this profile when running on JDK 8 we can ensure the JavaDocs continue to 
-                generate successfully -->
+            JavaDoc processing which was introduced in JDK 8. These are technically errors 
+            in the JavaDoc which we need to eventually address. However, if a release 
+            is performed using JDK 8, the JavaDoc generation would fail. By activating 
+            this profile when running on JDK 8 we can ensure the JavaDocs continue to 
+            generate successfully -->
             <id>disable-doclint</id>
             <activation>
                 <jdk>1.8</jdk>

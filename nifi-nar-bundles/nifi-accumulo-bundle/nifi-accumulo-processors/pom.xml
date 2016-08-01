@@ -33,6 +33,7 @@
         <dependency>
             <groupId>org.apache.accumulo</groupId>
             <artifactId>accumulo-core</artifactId>
+            <version>1.7.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
@@ -41,9 +42,8 @@
             <type>jar</type>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
+            <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-api</artifactId>
-            <version>${project.version}</version>
         </dependency>
     </dependencies>
 </project>
